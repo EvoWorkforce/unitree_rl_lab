@@ -46,10 +46,21 @@ def export_deploy_cfg(env: ManagerBasedRLEnv, log_dir):
         for item_name in ["lin_vel_x", "lin_vel_y", "ang_vel_z"]:
             ranges[item_name] = list(ranges[item_name])
         cfg["commands"]["base_velocity"]["ranges"] = ranges
+    
+    if hasattr(env.cfg.commands, "pose_command"):  # pose tracking command
+        cfg["commands"]["pose_command"] = {}
+        if hasattr(env.cfg.commands.pose_command, "limit_ranges"):
+            ranges = env.cfg.commands.pose_command.limit_ranges.to_dict()
+        else:
+            ranges = env.cfg.commands.pose_command.ranges.to_dict()
+        for item_name in ["pos_x", "pos_y", "heading"]:
+            if item_name in ranges:
+                ranges[item_name] = list(ranges[item_name])
+        cfg["commands"]["pose_command"]["ranges"] = ranges
 
     # --- actions ---
     action_names = env.action_manager.active_terms
-    action_terms = zip(action_names, env.action_manager._terms.values())
+    action_terms = list(zip(action_names, env.action_manager._terms.values()))
     cfg["actions"] = {}
     for action_name, action_term in action_terms:
         term_cfg = action_term.cfg.copy()

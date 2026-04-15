@@ -5,7 +5,7 @@
  * interactions in a human-readable format. It supports logical expressions
  * combining button states with AND (+), OR (|), NOT (!), and parentheses.
  * Example expressions:
- * 
+ *
  * --- Basic ---
  * - "A"                  # A is pressed
  * - "A.on_pressed"       # A is just pressed (single frame trigger)
@@ -16,10 +16,12 @@
  * - "RB+X.on_pressed"    # RB is pressed + X is just pressed
  *
  * --- Directional Key Combinations ---
- * - "up+right"           # Up and right directions are pressed simultaneously (diagonal)
+ * - "up+right"           # Up and right directions are pressed simultaneously
+ * (diagonal)
  *
  * --- Long Press Detection ---
- * - "LT(2s) + up"        # LT is pressed for more than 2 seconds and up is pressed
+ * - "LT(2s) + up"        # LT is pressed for more than 2 seconds and up is
+ * pressed
  * - "LT(3s).pressed"     # Equivalent to above (explicitly specifying .pressed)
  *
  * --- Multi-condition OR ---
@@ -29,7 +31,8 @@
  * --- Logical NOT ---
  * - "!A + B"             # A is not pressed and B is pressed
  * - "!(A + B)"           # A and B are not pressed simultaneously
- * - "!LT(1s)"            # LT is not pressed for 1 second (i.e., LT.pressed_time < 1 or not pressed)
+ * - "!LT(1s)"            # LT is not pressed for 1 second (i.e.,
+ * LT.pressed_time < 1 or not pressed)
  *
  * --- Nested Grouping ---
  * - "(A + B) | (X + Y)"  # A+B or X+Y is satisfied
@@ -44,7 +47,8 @@
  *
  * --- Axes and Trigger Keys ---
  * - "LX + LY"            # Left joystick exceeds threshold in any direction
- * - "RX(1s) + B"         # Right joystick holds beyond threshold for 1s + B is pressed
+ * - "RX(1s) + B"         # Right joystick holds beyond threshold for 1s + B is
+ * pressed
  *
  * --- Start/Exit Actions ---
  * - "start.on_pressed"   # Start button is just pressed
@@ -57,15 +61,15 @@
  */
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <functional>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <stdexcept>
-#include <cctype>
-#include <memory>
-#include <algorithm>
 #include <yaml-cpp/yaml.h>
 
 #include <unitree/dds_wrapper/common/unitree_joystick.hpp>
@@ -75,55 +79,78 @@ namespace unitree::common::dsl {
 // ======================== Lexical Analysis ========================
 struct Token {
   enum Kind {
-    kIdent, kNumber,
-    kPlus, kOr, kNot,
-    kLParen, kRParen,
-    kDot, kEnd
+    kIdent,
+    kNumber,
+    kPlus,
+    kOr,
+    kNot,
+    kLParen,
+    kRParen,
+    kDot,
+    kEnd
   } kind;
   std::string text;
 };
 
 class Lexer {
- public:
+public:
   explicit Lexer(std::string s) : s_(s) {}
   Token Next() {
     SkipWs();
-    if (pos_ >= s_.size()) return {Token::kEnd, ""};
+    if (pos_ >= s_.size())
+      return {Token::kEnd, ""};
     char c = s_[pos_];
-    if (std::isalpha(static_cast<unsigned char>(c))) return Ident();
-    if (std::isdigit(static_cast<unsigned char>(c))) return Number(); // Only support [1-9]
+    if (std::isalpha(static_cast<unsigned char>(c)))
+      return Ident();
+    if (std::isdigit(static_cast<unsigned char>(c)))
+      return Number(); // Only support [1-9]
     ++pos_;
     switch (c) {
-      case '+': return {Token::kPlus, "+"};
-      case '|': return {Token::kOr, "|"};
-      case '!': return {Token::kNot, "!"};
-      case '(': return {Token::kLParen, "("};
-      case ')': return {Token::kRParen, ")"};
-      case '.': return {Token::kDot, "."};
-      default:  throw std::runtime_error(std::string("Unexpected char: ") + std::string(1, c) + " near pos=" + std::to_string(pos_-1));
+    case '+':
+      return {Token::kPlus, "+"};
+    case '|':
+      return {Token::kOr, "|"};
+    case '!':
+      return {Token::kNot, "!"};
+    case '(':
+      return {Token::kLParen, "("};
+    case ')':
+      return {Token::kRParen, ")"};
+    case '.':
+      return {Token::kDot, "."};
+    default:
+      throw std::runtime_error(std::string("Unexpected char: ") +
+                               std::string(1, c) +
+                               " near pos=" + std::to_string(pos_ - 1));
     }
   }
   size_t pos() const { return pos_; }
 
- private:
+private:
   void SkipWs() {
-    while (pos_ < s_.size() && std::isspace(static_cast<unsigned char>(s_[pos_]))) ++pos_;
+    while (pos_ < s_.size() &&
+           std::isspace(static_cast<unsigned char>(s_[pos_])))
+      ++pos_;
   }
   Token Ident() {
     size_t start = pos_;
-    while (pos_ < s_.size() &&
-           (std::isalnum(static_cast<unsigned char>(s_[pos_])) || s_[pos_]=='_'))
+    while (
+        pos_ < s_.size() &&
+        (std::isalnum(static_cast<unsigned char>(s_[pos_])) || s_[pos_] == '_'))
       ++pos_;
-    return {Token::kIdent, std::string(s_.substr(start, pos_-start))};
+    return {Token::kIdent, std::string(s_.substr(start, pos_ - start))};
   }
   Token Number() {
     size_t start = pos_;
     if (pos_ < s_.size() && s_[pos_] >= '1' && s_[pos_] <= '9') {
       ++pos_;
     } else {
-      throw std::runtime_error("Expected a number starting with [1-9] near pos=" + std::to_string(pos_));
+      throw std::runtime_error(
+          "Expected a number starting with [1-9] near pos=" +
+          std::to_string(pos_));
     }
-    while (pos_ < s_.size() && std::isdigit(static_cast<unsigned char>(s_[pos_]))) {
+    while (pos_ < s_.size() &&
+           std::isdigit(static_cast<unsigned char>(s_[pos_]))) {
       ++pos_;
     }
     return {Token::kNumber, std::string(s_.substr(start, pos_ - start))};
@@ -133,78 +160,151 @@ class Lexer {
   size_t pos_{0};
 };
 
-// ======================== Abstract Syntax Tree (AST) & Semantics ========================
+// ======================== Abstract Syntax Tree (AST) & Semantics
+// ========================
 enum class Field { kPressed, kOnPressed, kOnReleased, kHoldTimeGE };
 
 struct Atom {
-  std::string name;         // Key name: "LT" "RB" "up" ...
+  std::string name; // Key name: "LT" "RB" "up" ...
   Field field{Field::kPressed};
-  float hold_seconds{0.f};  // used when field==kHoldTimeGE
+  float hold_seconds{0.f}; // used when field==kHoldTimeGE
 };
 
 struct Node {
   enum Kind { kAtom, kNot, kAnd, kOr } kind{kAtom};
-  Atom atom;                  // kAtom
-  std::unique_ptr<Node> lhs;  // kNot: child is in lhs; kAnd/kOr: left
-  std::unique_ptr<Node> rhs;  // kAnd/kOr: right
+  Atom atom;                 // kAtom
+  std::unique_ptr<Node> lhs; // kNot: child is in lhs; kAnd/kOr: left
+  std::unique_ptr<Node> rhs; // kAnd/kOr: right
 };
 
-// Utility to convert strings to lowercase (used to make key names case-insensitive)
+// Utility to convert strings to lowercase (used to make key names
+// case-insensitive)
 inline std::string ToLower(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+  std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
   return s;
 }
 
 // Retrieve KeyBase from UnitreeJoystick (case-insensitive)
-inline const KeyBase& GetKey(const UnitreeJoystick& joy, std::string_view name_sv) {
+inline const KeyBase &GetKey(const UnitreeJoystick &joy,
+                             std::string_view name_sv) {
   const std::string name = ToLower(std::string{name_sv});
-  static const std::unordered_map<std::string, const KeyBase* (*)(const UnitreeJoystick&)> kMap = {
-    {"back", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.back); }},
-    {"start",[](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.start); }},
-    {"ls",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LS); }},
-    {"rs",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RS); }},
-    {"lb",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LB); }},
-    {"rb",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RB); }},
-    {"a",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.A); }},
-    {"b",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.B); }},
-    {"x",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.X); }},
-    {"y",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.Y); }},
-    {"up",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.up); }},
-    {"down", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.down); }},
-    {"left", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.left); }},
-    {"right",[](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.right); }},
-    {"f1",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.F1); }},
-    {"f2",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.F2); }},
-    {"lx",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.lx); }},
-    {"ly",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.ly); }},
-    {"rx",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.rx); }},
-    {"ry",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.ry); }},
-    {"lt",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LT); }},
-    {"rt",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RT); }},
-  };
+  static const std::unordered_map<std::string,
+                                  const KeyBase *(*)(const UnitreeJoystick &)>
+      kMap = {
+          {"back",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.back);
+           }},
+          {"start",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.start);
+           }},
+          {"ls",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.LS);
+           }},
+          {"rs",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.RS);
+           }},
+          {"lb",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.LB);
+           }},
+          {"rb",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.RB);
+           }},
+          {"a",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.A);
+           }},
+          {"b",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.B);
+           }},
+          {"x",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.X);
+           }},
+          {"y",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.Y);
+           }},
+          {"up",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.up);
+           }},
+          {"down",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.down);
+           }},
+          {"left",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.left);
+           }},
+          {"right",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.right);
+           }},
+          {"f1",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.F1);
+           }},
+          {"f2",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.F2);
+           }},
+          {"lx",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.lx);
+           }},
+          {"ly",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.ly);
+           }},
+          {"rx",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.rx);
+           }},
+          {"ry",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.ry);
+           }},
+          {"lt",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.LT);
+           }},
+          {"rt",
+           [](auto &j) -> const KeyBase * {
+             return &static_cast<const KeyBase &>(j.RT);
+           }},
+      };
   auto it = kMap.find(name);
-  if (it == kMap.end()) throw std::runtime_error("Unknown key name: " + std::string(name_sv));
+  if (it == kMap.end())
+    throw std::runtime_error("Unknown key name: " + std::string(name_sv));
   return *it->second(joy);
 }
 
 // ======================== Recursive Descent Parser ========================
 // Supports: ! unary NOT; + logical AND; | logical OR; () grouping
-// Atom syntax: name [ '(' number ['s'|'sec'|'secs'] ')' ] [ '.' (pressed|on_pressed|on_released) ]
+// Atom syntax: name [ '(' number ['s'|'sec'|'secs'] ')' ] [ '.'
+// (pressed|on_pressed|on_released) ]
 class Parser {
- public:
-  explicit Parser(std::string expr) : lex_(expr) { 
-    tok_ = lex_.Next(); 
-  }
+public:
+  explicit Parser(std::string expr) : lex_(expr) { tok_ = lex_.Next(); }
   std::unique_ptr<Node> Parse() {
     auto n = ParseOr();
     if (tok_.kind != Token::kEnd) {
-      throw std::runtime_error("Trailing tokens near pos=" + std::to_string(lex_.pos()));
+      throw std::runtime_error("Trailing tokens near pos=" +
+                               std::to_string(lex_.pos()));
     }
     return n;
   }
 
- private:
+private:
   std::unique_ptr<Node> ParseOr() {
     auto left = ParseAnd();
     while (tok_.kind == Token::kOr) {
@@ -250,7 +350,9 @@ class Parser {
   }
 
   std::unique_ptr<Node> ParseAtom() {
-    if (tok_.kind != Token::kIdent) throw std::runtime_error("Expected identifier near pos=" + std::to_string(lex_.pos()));
+    if (tok_.kind != Token::kIdent)
+      throw std::runtime_error("Expected identifier near pos=" +
+                               std::to_string(lex_.pos()));
     Atom a;
     a.name = tok_.text;
     Eat(Token::kIdent);
@@ -258,7 +360,9 @@ class Parser {
     // Optional hold duration: name '(' number ['s'|'sec'|'secs'] ')'
     if (tok_.kind == Token::kLParen) {
       Eat(Token::kLParen);
-      if (tok_.kind != Token::kNumber) throw std::runtime_error("Expected hold seconds number near pos=" + std::to_string(lex_.pos()));
+      if (tok_.kind != Token::kNumber)
+        throw std::runtime_error("Expected hold seconds number near pos=" +
+                                 std::to_string(lex_.pos()));
       a.hold_seconds = std::stof(tok_.text);
       Eat(Token::kNumber);
       // Optional unit
@@ -268,7 +372,8 @@ class Parser {
           Eat(Token::kIdent);
         } else {
           // Allow clearer error message for unknown or missing units
-          throw std::runtime_error("Unknown time unit '" + tok_.text + "'; use 's'/'sec'");
+          throw std::runtime_error("Unknown time unit '" + tok_.text +
+                                   "'; use 's'/'sec'");
         }
       }
       Eat(Token::kRParen);
@@ -278,12 +383,19 @@ class Parser {
     // Optional explicit state
     if (tok_.kind == Token::kDot) {
       Eat(Token::kDot);
-      if (tok_.kind != Token::kIdent) throw std::runtime_error("Expected state after '.' near pos=" + std::to_string(lex_.pos()));
+      if (tok_.kind != Token::kIdent)
+        throw std::runtime_error("Expected state after '.' near pos=" +
+                                 std::to_string(lex_.pos()));
       const std::string st = tok_.text;
-      if (st == "on_pressed")      a.field = Field::kOnPressed;
-      else if (st == "on_released") a.field = Field::kOnReleased;
-      else if (st == "pressed")     a.field = Field::kPressed;
-      else throw std::runtime_error("Unknown field: " + st + " (allowed: pressed|on_pressed|on_released)");
+      if (st == "on_pressed")
+        a.field = Field::kOnPressed;
+      else if (st == "on_released")
+        a.field = Field::kOnReleased;
+      else if (st == "pressed")
+        a.field = Field::kPressed;
+      else
+        throw std::runtime_error("Unknown field: " + st +
+                                 " (allowed: pressed|on_pressed|on_released)");
       Eat(Token::kIdent);
     }
 
@@ -296,7 +408,8 @@ class Parser {
 
   void Eat(Token::Kind k) {
     if (tok_.kind != k) {
-      throw std::runtime_error("Unexpected token near pos=" + std::to_string(lex_.pos()));
+      throw std::runtime_error("Unexpected token near pos=" +
+                               std::to_string(lex_.pos()));
     }
     tok_ = lex_.Next();
   }
@@ -305,36 +418,41 @@ class Parser {
   Token tok_{Token::kEnd, ""};
 };
 
-// ======================== Compile to Executable Predicate ========================
-inline std::function<bool(const UnitreeJoystick&)> Compile(const Node& n) {
+// ======================== Compile to Executable Predicate
+// ========================
+inline std::function<bool(const UnitreeJoystick &)> Compile(const Node &n) {
   switch (n.kind) {
-    case Node::kAtom: {
-      Atom a = n.atom;
-      return [a](const UnitreeJoystick& joy) -> bool {
-        const KeyBase& kb = GetKey(joy, a.name);
-        switch (a.field) {
-          case Field::kPressed:     return kb.pressed;
-          case Field::kOnPressed:   return kb.on_pressed;
-          case Field::kOnReleased:  return kb.on_released;
-          case Field::kHoldTimeGE:  return kb.pressed && (kb.pressed_time >= a.hold_seconds);
-        }
-        return false;
-      };
-    }
-    case Node::kNot: {
-      auto child = Compile(*n.lhs);
-      return [child](const UnitreeJoystick& joy){ return !child(joy); };
-    }
-    case Node::kAnd: {
-      auto l = Compile(*n.lhs);
-      auto r = Compile(*n.rhs);
-      return [l, r](const UnitreeJoystick& joy){ return l(joy) && r(joy); };
-    }
-    case Node::kOr: {
-      auto l = Compile(*n.lhs);
-      auto r = Compile(*n.rhs);
-      return [l, r](const UnitreeJoystick& joy){ return l(joy) || r(joy); };
-    }
+  case Node::kAtom: {
+    Atom a = n.atom;
+    return [a](const UnitreeJoystick &joy) -> bool {
+      const KeyBase &kb = GetKey(joy, a.name);
+      switch (a.field) {
+      case Field::kPressed:
+        return kb.pressed;
+      case Field::kOnPressed:
+        return kb.on_pressed;
+      case Field::kOnReleased:
+        return kb.on_released;
+      case Field::kHoldTimeGE:
+        return kb.pressed && (kb.pressed_time >= a.hold_seconds);
+      }
+      return false;
+    };
+  }
+  case Node::kNot: {
+    auto child = Compile(*n.lhs);
+    return [child](const UnitreeJoystick &joy) { return !child(joy); };
+  }
+  case Node::kAnd: {
+    auto l = Compile(*n.lhs);
+    auto r = Compile(*n.rhs);
+    return [l, r](const UnitreeJoystick &joy) { return l(joy) && r(joy); };
+  }
+  case Node::kOr: {
+    auto l = Compile(*n.lhs);
+    auto r = Compile(*n.rhs);
+    return [l, r](const UnitreeJoystick &joy) { return l(joy) || r(joy); };
+  }
   }
   throw std::runtime_error("Invalid node kind");
 }

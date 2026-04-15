@@ -11,9 +11,38 @@
 import gymnasium as gym
 import pathlib
 import sys
+import argparse
+import argcomplete
+import cli_args
 
 sys.path.insert(0, f"{pathlib.Path(__file__).parent.parent}")
 from list_envs import import_packages  # noqa: F401
+
+# add argparse arguments
+parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
+parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
+parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
+parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
+parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
+parser.add_argument(
+    "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+)
+parser.add_argument(
+    "--disable_wandb", action="store_true", default=False, help="Disable WandB logging (enabled by default)."
+)
+
+from isaaclab.app import AppLauncher
+# append RSL-RL cli arguments
+cli_args.add_rsl_rl_args(parser)
+# append AppLauncher cli args
+AppLauncher.add_app_launcher_args(parser)
+argcomplete.autocomplete(parser)
+args_cli, hydra_args = parser.parse_known_args()
+
+import_packages(launch_sim=True, headless=True)
 
 sys.path.pop(0)
 
@@ -22,34 +51,6 @@ for task_spec in gym.registry.values():
     if "Unitree" in task_spec.id and "Isaac" not in task_spec.id:
         tasks.append(task_spec.id)
 
-import argparse
-
-import argcomplete
-
-from isaaclab.app import AppLauncher
-
-# local imports
-import cli_args  # isort: skip
-
-# add argparse arguments
-parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, choices=tasks, help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
-parser.add_argument(
-    "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
-)
-# append RSL-RL cli arguments
-cli_args.add_rsl_rl_args(parser)
-# append AppLauncher cli args
-AppLauncher.add_app_launcher_args(parser)
-argcomplete.autocomplete(parser)
-args_cli, hydra_args = parser.parse_known_args()
-
 # always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True
@@ -57,9 +58,9 @@ if args_cli.video:
 # clear out sys.argv for Hydra
 sys.argv = [sys.argv[0]] + hydra_args
 
-# launch omniverse app
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
+# launch omniverse app with headless option
+# app_launcher = AppLauncher(args_cli, headless=args_cli.headless)
+# simulation_app = app_launcher.app
 
 """Check for minimum supported RSL-RL version."""
 
@@ -90,6 +91,7 @@ import inspect
 import os
 import shutil
 import torch
+import wandb
 from datetime import datetime
 
 from rsl_rl.runners import OnPolicyRunner  # TODO: Consider printing the experiment name in the terminal.
@@ -146,6 +148,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
+    
+    # Print WandB status
+    if hasattr(agent_cfg, "logger") and agent_cfg.logger == "wandb":
+        wandb_project = getattr(agent_cfg, "wandb_project", "unitree_rl_lab")
+        print(f"[INFO] WandB logging enabled - Project: {wandb_project}")
+    elif hasattr(agent_cfg, "logger"):
+        print(f"[INFO] Using {agent_cfg.logger} for logging")
+    
     # specify directory for logging runs: {time-stamp}_{run_name}
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     # This way, the Ray Tune workflow can extract experiment name.
@@ -153,6 +163,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if agent_cfg.run_name:
         log_dir += f"_{agent_cfg.run_name}"
     log_dir = os.path.join(log_root_path, log_dir)
+    
+    # Initialize WandB if enabled
+    wandb_run = None
+    if hasattr(agent_cfg, "logger") and agent_cfg.logger == "wandb" and not args_cli.disable_wandb:
+        wandb_run = wandb.init(project=getattr(agent_cfg, "wandb_project", "unitree_rl_lab"), name=os.path.basename(log_dir), sync_tensorboard=True)
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
@@ -194,6 +209,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
     export_deploy_cfg(env.unwrapped, log_dir)
+    if wandb_run and os.path.exists(os.path.join(log_dir, "params", "deploy.yaml")):
+        wandb.save(os.path.join(log_dir, "params", "deploy.yaml"), base_path=log_dir)
     # copy the environment configuration file to the log directory
     shutil.copy(
         inspect.getfile(env_cfg.__class__),

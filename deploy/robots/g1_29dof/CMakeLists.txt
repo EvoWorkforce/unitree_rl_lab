@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(g1_29dof_controller)
 
+set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(Boost REQUIRED COMPONENTS program_options)

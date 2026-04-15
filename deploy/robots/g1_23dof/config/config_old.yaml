@@ -1,0 +1,196 @@
+all_transitions: &all_transitions
+  Passive: RT + B.on_pressed | key_1.on_pressed
+  FixStand: RT + Y.on_pressed | key_2.on_pressed
+  VelocityV2.6: RB + X.on_pressed | key_3.on_pressed
+  VelocityV3: RB + B.on_pressed
+  WideStance: RB + A.on_pressed
+  DanceShort: LB + up.on_pressed
+  GangnamStyle: LB + right.on_pressed
+  HorsePunch: LB + down.on_pressed
+  Dance2Subject3: LB + left.on_pressed
+  SpinAround: LT + up.on_pressed
+  Navigation: key_n.on_pressed
+  NavigationPID: key_p.on_pressed
+  PoseTrackingV0: key_t.on_pressed
+  PoseTrackingV1: key_y.on_pressed
+  PoseTrackingV2: key_u.on_pressed
+
+FSM:
+  enable_keyboard: true  # Enable keyboard input for FSM transitions
+  _: # enabled fsms
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    VelocityV2.6:
+      id: 3
+      type: RLBase
+    VelocityV3:
+      id: 4
+      type: RLBase
+    WideStance:
+      id: 5
+      type: RLBase
+    DanceShort:
+      id: 101
+      type: Mimic
+    GangnamStyle:
+      id: 102
+      type: Mimic
+    HorsePunch:
+      id: 103
+      type: Mimic
+    Dance2Subject3:
+      id: 104
+      type: Mimic
+    SpinAround:
+      id: 105
+      type: Mimic
+    Navigation:
+      id: 201
+      type: Navigation
+    NavigationPID:
+      id: 202
+      type: NavigationPID
+    PoseTrackingV0:
+      id: 203
+      type: PoseTracking
+    PoseTrackingV1:
+      id: 204
+      type: PoseTracking
+    PoseTrackingV2:
+      id: 205
+      type: PoseTracking
+
+  Passive:
+    transitions: *all_transitions
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,  
+      3,3,3,3,3,3,3,  
+    ]
+
+  FixStand:
+    transitions: *all_transitions
+    kp: [
+      100., 100., 100., 150., 40., 40.,
+      100., 100., 100., 150., 40., 40.,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 3]
+    qs: [
+      [],
+      [ -0.1, 0,0,0.3,-0.2,0,
+        -0.1, 0,0,0.3,-0.2,0,
+        0,0,0,
+        0, 0.25,0,0.97,0.15, 0,0,
+        0, -0.25,0,0.97,-0.15, 0,0
+      ]
+    ]
+
+  VelocityV2.6:
+    transitions: *all_transitions
+    policy_dir: config/policy/velocity/v2.6
+
+  VelocityV3:
+    transitions: *all_transitions
+    policy_dir: config/policy/velocity/v3
+
+  WideStance:
+    transitions: *all_transitions
+    policy_dir: config/policy/velocity/wide_stance
+
+  DanceShort:
+    transitions: *all_transitions
+    fps: 30
+    motion_file: config/policy/mimic/dance_short/params/dance1_subject2_23dof_short.csv
+    policy_dir: config/policy/mimic/dance_short/
+    time_start: 0.0
+    time_end: 10.33
+
+  GangnamStyle:
+    transitions: *all_transitions
+    fps: 60
+    motion_file: config/policy/mimic/gangnam_style/params/gangnam_style_4sec_23dof.csv
+    policy_dir: config/policy/mimic/gangnam_style/
+    time_start: 0.0
+    time_end: 4.0
+
+  HorsePunch:
+    transitions: *all_transitions
+    fps: 30
+    motion_file: config/policy/mimic/horse_punch/params/horse_punch_with_standing_8sec_30hz.csv
+    policy_dir: config/policy/mimic/horse_punch/
+    time_start: 0.0
+    time_end: 8.0
+
+  Dance2Subject3:
+    transitions: *all_transitions
+    fps: 30
+    motion_file: config/policy/mimic/dance2_subject3/params/dance2_subject3_trimmed.csv
+    policy_dir: config/policy/mimic/dance2_subject3/
+    time_start: 0.0
+    time_end: 14.0
+
+  SpinAround:
+    transitions: *all_transitions
+    fps: 30
+    motion_file: config/policy/mimic/spin_around/params/spin_around.csv
+    policy_dir: config/policy/mimic/spin_around/
+    time_start: 0.0
+    time_end: 7.0
+
+  Navigation:
+    transitions: *all_transitions
+    policy_dir: config/policy/navigation
+    velcity_policy_dir: config/policy/velocity/v2.6
+    high_level_decimation: 10
+    goal_pose_topic: rt/goal_pose
+
+  NavigationPID:
+    transitions: *all_transitions
+    policy_dir: config/policy/velocity/v2.6
+    goal_pose_topic: rt/goal_pose
+    pid_gains:
+      kp_x: 5.0
+      kp_y: 5.0
+      kp_yaw: 10.0
+    debug_print: true
+
+  PoseTrackingV0:
+    transitions: *all_transitions
+    policy_dir: config/policy/pose_tracking/v0
+    goal_pose_topic: rt/goal_pose
+    debug_print: true
+    yaw_offset: -0.6
+    min_safe_distance: 0.5
+
+  PoseTrackingV1:
+    transitions: *all_transitions
+    policy_dir: config/policy/pose_tracking/v1
+    goal_pose_topic: rt/goal_pose
+    debug_print: true
+
+  PoseTrackingV2:
+    transitions: *all_transitions
+    policy_dir: config/policy/pose_tracking/v2
+    goal_pose_topic: rt/goal_pose
+    debug_print: true

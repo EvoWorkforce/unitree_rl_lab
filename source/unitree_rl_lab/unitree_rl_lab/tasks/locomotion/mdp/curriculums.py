@@ -8,6 +8,60 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+def pose_cmd_levels(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    termination_term_name: str = "goal_reached",
+    success_threshold: float = 0.5,
+) -> torch.Tensor:
+    """Curriculum for pose command ranges.
+    
+    Progressively increases the position command ranges (pos_x, pos_y) based on
+    the goal completion rate. When the robot successfully reaches goals in more
+    than success_threshold of episodes, the difficulty increases.
+    
+    Args:
+        env: The environment instance.
+        env_ids: Environment indices to compute curriculum for.
+        termination_term_name: Name of the goal_reached termination term.
+        success_threshold: Fraction of successful episodes needed to increase difficulty (0.0-1.0).
+    """
+    command_term = env.command_manager.get_term("pose_command")
+    ranges = command_term.cfg.ranges
+    limit_ranges = command_term.cfg.limit_ranges
+
+    # Check if the termination term exists
+    if termination_term_name in env.termination_manager.active_terms:
+        # Get the index for this termination term
+        term_idx = env.termination_manager._term_name_to_term_idx[termination_term_name]
+        
+        # Get which environments terminated with goal_reached in the last episode
+        # _last_episode_dones is a tensor of shape (num_envs, num_terms) with boolean values
+        # Use ALL environments, not just env_ids, for a global success rate
+        goal_reached_all = env.termination_manager._last_episode_dones[:, term_idx]
+        
+        # Calculate success rate as the fraction of ALL environments that reached the goal
+        success_rate = torch.mean(goal_reached_all.float())
+        
+        # Increase difficulty if success rate exceeds threshold
+        # Check periodically (every episode length)
+        if env.common_step_counter % env.max_episode_length == 0:
+            if success_rate > success_threshold:
+                delta_command = torch.tensor([-0.1, 0.1], device=env.device)
+                ranges.pos_x = torch.clamp(
+                    torch.tensor(ranges.pos_x, device=env.device) + delta_command,
+                    limit_ranges.pos_x[0],
+                    limit_ranges.pos_x[1],
+                ).tolist()
+                ranges.pos_y = torch.clamp(
+                    torch.tensor(ranges.pos_y, device=env.device) + delta_command,
+                    limit_ranges.pos_y[0],
+                    limit_ranges.pos_y[1],
+                ).tolist()
+
+    return torch.tensor(ranges.pos_x[1], device=env.device)
+
+
 def lin_vel_cmd_levels(
     env: ManagerBasedRLEnv,
     env_ids: Sequence[int],

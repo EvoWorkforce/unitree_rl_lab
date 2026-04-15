@@ -14,8 +14,81 @@ from isaaclab.sensors import ContactSensor
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
+
 """
-Joint penalties.
+Goal tracking
+"""
+
+
+def track_goal_pose_exp(
+    env, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    goal_pos = env.command_manager.get_command(command_name)[:, :2]  # shape: (N, 2)
+    robot_pos = asset.data.root_pos_w[:, :2]  # shape: (N, 2)
+    dist_error = torch.sum(torch.square(goal_pos - robot_pos), dim=1)
+    return torch.exp(-dist_error / std**2)
+
+
+def progress_to_goal(
+    env, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """
+    Progress reward: r_prog = (d_{t-1} - d_t), where d_t = ||p_goal - p_robot||
+    Positive when moving toward the goal.
+    """
+    asset = env.scene[asset_cfg.name]
+    goal_pos = env.command_manager.get_command(command_name)[:, :2]  # (N, 2)
+    robot_pos = asset.data.root_pos_w[:, :2]  # (N, 2)
+    d_t = torch.norm(goal_pos - robot_pos, dim=1)  # (N,)
+    # Buffer previous distance in env
+    if not hasattr(env, "_prev_goal_dist") or env._prev_goal_dist is None or env._prev_goal_dist.shape != d_t.shape:
+        env._prev_goal_dist = d_t.clone()
+    r_prog = env._prev_goal_dist - d_t
+    env._prev_goal_dist = d_t.clone()
+    return r_prog
+
+
+def velocity_towards_goal(
+    env, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """
+    Reward for velocity towards the goal: r_vel_goal = dot(v_robot, unit_vec_goal)
+    where v_robot is the robot's linear velocity and unit_vec_goal is the unit vector from the robot to the goal.
+    """
+    asset = env.scene[asset_cfg.name]
+    goal_pos = env.command_manager.get_command(command_name)[:, :2]  # (N, 2)
+    robot_pos = asset.data.root_pos_w[:, :2]  # (N, 2)
+    robot_vel = asset.data.root_lin_vel_w[:, :2]  # (N, 2)
+
+    vec_to_goal = goal_pos - robot_pos  # (N, 2)
+    dist_to_goal = torch.norm(vec_to_goal, dim=1, keepdim=True) + 1e-8  # (N, 1)
+    unit_vec_to_goal = vec_to_goal / dist_to_goal  # (N, 2)
+
+    r_vel_goal = torch.sum(robot_vel * unit_vec_to_goal, dim=1)  # (N,)
+    return r_vel_goal
+
+
+def lin_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Reward xy base linear velocity using L2 squared kernel."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+
+
+def lin_vel_outside_range_exp(
+    env: ManagerBasedRLEnv, v_min: float, v_max: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), std: float = 0.2) -> torch.Tensor:
+    asset: RigidObject = env.scene[asset_cfg.name]
+    v = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+    # Penalize below min and above max
+    # penalty_below = torch.exp(-(v - v_min) / std**2)
+    penalty_above = torch.exp(-(v_max - v) / std**2)
+    # Penalty value is close to zero when v is within [v_min, v_max], large positive value otherwise
+    # return torch.clamp(penalty_below + penalty_above, min=0.0, max=1.0)
+    return torch.clamp(penalty_above, min=0.0, max=1.0)
+
+
+"""
+Joints
 """
 
 
@@ -28,18 +101,40 @@ def energy(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
 
-def stand_still(
-    env: ManagerBasedRLEnv, command_name: str = "base_velocity", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
-) -> torch.Tensor:
+def joint_mirror(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mirror_joints: list[list[str]]) -> torch.Tensor:
+    # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
+    if not hasattr(env, "joint_mirror_joints_cache") or env.joint_mirror_joints_cache is None:
+        # Cache joint positions for all pairs
+        env.joint_mirror_joints_cache = [
+            [asset.find_joints(joint_name) for joint_name in joint_pair] for joint_pair in mirror_joints
+        ]
+    reward = torch.zeros(env.num_envs, device=env.device)
+    # Iterate over all joint pairs
+    for joint_pair in env.joint_mirror_joints_cache:
+        # Calculate the difference for each pair and add to the total reward
+        reward += torch.sum(
+            torch.square(asset.data.joint_pos[:, joint_pair[0][0]] - asset.data.joint_pos[:, joint_pair[1][0]]),
+            dim=-1,
+        )
+    reward *= 1 / len(mirror_joints) if len(mirror_joints) > 0 else 0
+    return reward
 
-    reward = torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-    cmd_norm = torch.norm(env.command_manager.get_command(command_name), dim=1)
-    return reward * (cmd_norm < 0.1)
+
+def joint_position_penalty(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, stand_still_scale: float, velocity_threshold: float, command_name: str = "base_velocity"
+) -> torch.Tensor:
+    """Penalize joint position error from default on the articulation."""
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    cmd = torch.linalg.norm(env.command_manager.get_command(command_name), dim=1)
+    body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+    reward = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+    return torch.where(torch.logical_or(cmd > 0.0, body_vel > velocity_threshold), reward, stand_still_scale * reward)
 
 
 """
-Robot.
+Robot
 """
 
 
@@ -64,20 +159,24 @@ def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
     return reward
 
 
-def joint_position_penalty(
-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, stand_still_scale: float, velocity_threshold: float
+def stand_still(
+    env: ManagerBasedRLEnv, command_name: str = "base_velocity", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
-    """Penalize joint position error from default on the articulation."""
-    # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
-    cmd = torch.linalg.norm(env.command_manager.get_command("base_velocity"), dim=1)
-    body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    reward = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-    return torch.where(torch.logical_or(cmd > 0.0, body_vel > velocity_threshold), reward, stand_still_scale * reward)
+
+    reward = torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+    cmd_norm = torch.norm(env.command_manager.get_command(command_name), dim=1)
+    return reward * (cmd_norm < 0.1)
+
+
+def ang_acc_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize base angular acceleration in the xy axes using L2 squared kernel."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return torch.sum(torch.square(asset.data.root_ang_acc_b[:, :2]), dim=1)
 
 
 """
-Feet rewards.
+Feet
 """
 
 
@@ -152,6 +251,31 @@ def feet_contact_without_cmd(
     return reward * (command_norm < 0.1)
 
 
+def feet_height_symmetry(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, sensor_cfg: SceneEntityCfg, target_height: float, tanh_mult: float = 2.0
+) -> torch.Tensor:
+    """Penalize asymmetric deviation from target height - encourages both feet to deviate equally from target"""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    
+    # Get foot heights
+    feet_heights = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]  # (num_envs, 2)
+    feet_vel_xy = torch.norm(asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2], dim=2)  # (num_envs, 2)
+    
+    # Calculate each foot's deviation from target height
+    left_error = torch.abs(feet_heights[:, 0] - target_height)  # (num_envs,)
+    right_error = torch.abs(feet_heights[:, 1] - target_height)  # (num_envs,)
+    
+    # Penalize difference between the two errors (asymmetry)
+    error_asymmetry = torch.abs(left_error - right_error)  # (num_envs,)
+    
+    # Weight by foot velocity - only care about symmetry when feet are moving
+    velocity_weight = torch.tanh(tanh_mult * feet_vel_xy)  # (num_envs, 2)
+    avg_velocity_weight = torch.mean(velocity_weight, dim=1)  # (num_envs,)
+    
+    return error_asymmetry * avg_velocity_weight
+
+
 def air_time_variance_penalty(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize variance in the amount of time each foot spends in the air/on the ground relative to each other"""
     # extract the used quantities (to enable type-hinting)
@@ -166,18 +290,13 @@ def air_time_variance_penalty(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg
     )
 
 
-"""
-Feet Gait rewards.
-"""
-
-
 def feet_gait(
     env: ManagerBasedRLEnv,
     period: float,
     offset: list[float],
     sensor_cfg: SceneEntityCfg,
     threshold: float = 0.5,
-    command_name=None,
+    command_name: str = "base_velocity",
 ) -> torch.Tensor:
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     is_contact = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids] > 0
@@ -201,25 +320,64 @@ def feet_gait(
 
 
 """
-Other rewards.
+ZMP
 """
 
 
-def joint_mirror(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mirror_joints: list[list[str]]) -> torch.Tensor:
-    # extract the used quantities (to enable type-hinting)
+def zmp_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Return L2 deviation of the dynamic ZMP from the midpoint of the feet to be penalized
+    """
     asset: Articulation = env.scene[asset_cfg.name]
-    if not hasattr(env, "joint_mirror_joints_cache") or env.joint_mirror_joints_cache is None:
-        # Cache joint positions for all pairs
-        env.joint_mirror_joints_cache = [
-            [asset.find_joints(joint_name) for joint_name in joint_pair] for joint_pair in mirror_joints
-        ]
-    reward = torch.zeros(env.num_envs, device=env.device)
-    # Iterate over all joint pairs
-    for joint_pair in env.joint_mirror_joints_cache:
-        # Calculate the difference for each pair and add to the total reward
-        reward += torch.sum(
-            torch.square(asset.data.joint_pos[:, joint_pair[0][0]] - asset.data.joint_pos[:, joint_pair[1][0]]),
-            dim=-1,
-        )
-    reward *= 1 / len(mirror_joints) if len(mirror_joints) > 0 else 0
-    return reward
+
+    # --- Dynamic ZMP calculation using CoM acceleration ---
+    # Get CoM position, velocity
+    com_xy = asset.data.root_com_pos_w[:, :2]  # (num_envs, 2)
+    com_z = asset.data.root_com_pos_w[:, 2]    # (num_envs,)
+    com_vel_xy = asset.data.root_com_vel_w[:, :2]  # (num_envs, 2)
+
+    # Store previous CoM velocity in the environment (buffered per env)
+    if not hasattr(env, "_prev_com_vel_xy") or env._prev_com_vel_xy is None or env._prev_com_vel_xy.shape != com_vel_xy.shape:
+        # Initialize buffer on first call or shape mismatch
+        env._prev_com_vel_xy = com_vel_xy.clone()
+
+    # Compute acceleration (finite difference)
+    com_acc_xy = (com_vel_xy - env._prev_com_vel_xy) / env.step_dt  # (num_envs, 2)
+    # Update buffer for next step
+    env._prev_com_vel_xy = com_vel_xy.clone()
+
+    # Dynamic ZMP formula: zmp_xy = com_xy - com_z / g * com_acc_xy
+    zmp_xy = com_xy - (com_z / 9.81).unsqueeze(-1) * com_acc_xy
+
+    # Get feet positions and midpoint
+    feet_xy = asset.data.body_pos_w[:, asset_cfg.body_ids, :2]  # (num_envs, 2, 2)
+    midpoint_xy = torch.mean(feet_xy, dim=1)  # (num_envs, 2)
+
+    # Return L2 distance from ZMP to center of feet
+    return torch.linalg.norm(zmp_xy - midpoint_xy, dim=1)
+
+
+"""
+Torso orientation penalties
+"""
+
+
+def torso_lean_back_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Penalty for leaning the torso back (-x direction in body frame)
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+    # Use projected gravity in body frame: x < 0 means leaning back
+    x = asset.data.projected_gravity_b[:, 0]
+    x = torch.where(x > 0, torch.zeros_like(x), x)  # set positive values to 0
+    return torch.abs(x)  # (num_envs,)
+
+
+def torso_lean_side_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Penalty for leaning the torso to the side (y direction in body frame)
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+    # Use projected gravity in body frame: y != 0 means leaning to the side
+    y = asset.data.projected_gravity_b[:, 1]
+    return torch.abs(y)  # (num_envs,)

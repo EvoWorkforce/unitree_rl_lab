@@ -83,12 +83,26 @@ def update_rsl_rl_cfg(agent_cfg: RslRlOnPolicyRunnerCfg, args_cli: argparse.Name
         agent_cfg.load_checkpoint = args_cli.checkpoint
     if args_cli.run_name is not None:
         agent_cfg.run_name = args_cli.run_name
-    if args_cli.logger is not None:
+    
+    # Handle WandB logging (enabled by default unless disabled or overridden)
+    if hasattr(args_cli, "disable_wandb") and args_cli.disable_wandb:
+        # Disable WandB if flag is set
+        agent_cfg.logger = "tensorboard"
+    elif args_cli.logger is not None:
+        # Use explicitly specified logger
         agent_cfg.logger = args_cli.logger
+    else:
+        # Default to WandB if no logger specified and not disabled
+        agent_cfg.logger = "wandb"
+    
     # set the project name for wandb and neptune
-    if agent_cfg.logger in {"wandb", "neptune"} and args_cli.log_project_name:
-        agent_cfg.wandb_project = args_cli.log_project_name
-        agent_cfg.neptune_project = args_cli.log_project_name
+    if agent_cfg.logger in {"wandb", "neptune"}:
+        if args_cli.log_project_name:
+            agent_cfg.wandb_project = args_cli.log_project_name
+            agent_cfg.neptune_project = args_cli.log_project_name
+        elif agent_cfg.logger == "wandb" and not hasattr(agent_cfg, "wandb_project"):
+            # Set default WandB project name if not specified
+            agent_cfg.wandb_project = "unitree_rl_lab"
 
     if agent_cfg.experiment_name == "":
         task_name = args_cli.task

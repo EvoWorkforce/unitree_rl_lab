@@ -31,30 +31,53 @@ complete -o nospace -F _ut_rl_lab_python_argcomplete_wrapper "./unitree_rl_lab.s
 
 _ut_setup_conda_env() {
 
-    # copied from isaaclab/_isaac_sim/setup_conda_env.sh
-    # add source unitree_rl_lab.sh to conda activate.d
-    printf '%s\n' '#!/usr/bin/env bash' '' \
-        '# for Isaac Lab' \
-        'export ISAACLAB_PATH='${ISAACLAB_PATH}'' \
-        'alias isaaclab='${ISAACLAB_PATH}'/isaaclab.sh' \
-        '' \
-        '# show icon if not running headless' \
-        'export RESOURCE_NAME="IsaacSim"' \
-        '' \
-        '# for unitree_rl_lab' \
-        'source '${UNITREE_RL_LAB_PATH}'/unitree_rl_lab.sh' \
-        '' > ${CONDA_PREFIX}/etc/conda/activate.d/setenv.sh
+    # Ensure the conda activate.d directory exists
+    mkdir -p ${CONDA_PREFIX}/etc/conda/activate.d
 
-    # check if we have _isaac_sim directory -> if so that means binaries were installed.
-    # we need to setup conda variables to load the binaries
-    local isaacsim_setup_conda_env_script=${ISAACLAB_PATH}/_isaac_sim/setup_conda_env.sh
+    # Check if isaaclab is installed in conda environment
+    if ${python_exe} -c "import isaaclab" 2>/dev/null; then
+        echo "[Info] IsaacLab detected in conda environment. Using conda installation."
+        
+        # Setup conda activation script without ISAACLAB_PATH
+        printf '%s\n' '#!/usr/bin/env bash' '' \
+            '# show icon if not running headless' \
+            'export RESOURCE_NAME="IsaacSim"' \
+            '' \
+            '# for unitree_rl_lab' \
+            'source '${UNITREE_RL_LAB_PATH}'/unitree_rl_lab.sh' \
+            '' > ${CONDA_PREFIX}/etc/conda/activate.d/setenv.sh
+    else
+        echo "[Info] IsaacLab not found in conda. Using local directory installation."
+        
+        # Check if ISAACLAB_PATH is set
+        if [[ -z "${ISAACLAB_PATH}" ]]; then
+            echo "[Warning] ISAACLAB_PATH environment variable is not set. Please set it to your IsaacLab installation directory."
+        fi
+        
+        # Setup conda activation script with ISAACLAB_PATH (local installation)
+        printf '%s\n' '#!/usr/bin/env bash' '' \
+            '# for Isaac Lab' \
+            'export ISAACLAB_PATH='${ISAACLAB_PATH}'' \
+            'alias isaaclab='${ISAACLAB_PATH}'/isaaclab.sh' \
+            '' \
+            '# show icon if not running headless' \
+            'export RESOURCE_NAME="IsaacSim"' \
+            '' \
+            '# for unitree_rl_lab' \
+            'source '${UNITREE_RL_LAB_PATH}'/unitree_rl_lab.sh' \
+            '' > ${CONDA_PREFIX}/etc/conda/activate.d/setenv.sh
 
-    if [ -f "${isaacsim_setup_conda_env_script}" ]; then
-        # add variables to environment during activation
-        printf '%s\n' \
-            '# for Isaac Sim' \
-            'source '${isaacsim_setup_conda_env_script}'' \
-            '' >> ${CONDA_PREFIX}/etc/conda/activate.d/setenv.sh
+        # check if we have _isaac_sim directory -> if so that means binaries were installed.
+        # we need to setup conda variables to load the binaries
+        local isaacsim_setup_conda_env_script=${ISAACLAB_PATH}/_isaac_sim/setup_conda_env.sh
+
+        if [ -f "${isaacsim_setup_conda_env_script}" ]; then
+            # add variables to environment during activation
+            printf '%s\n' \
+                '# for Isaac Sim' \
+                'source '${isaacsim_setup_conda_env_script}'' \
+                '' >> ${CONDA_PREFIX}/etc/conda/activate.d/setenv.sh
+        fi
     fi
 }
 
@@ -64,7 +87,14 @@ case "$1" in
         git lfs install # ensure git lfs is installed
         pip install -e ${UNITREE_RL_LAB_PATH}/source/unitree_rl_lab/
         _ut_setup_conda_env
-        activate-global-python-argcomplete
+        
+        # Try to activate argcomplete with user-level installation first
+        if activate-global-python-argcomplete --user 2>/dev/null; then
+            echo "[Info] Argcomplete activated for user."
+        else
+            echo "[Warning] Could not activate global argcomplete. Tab completion may not work in new shells."
+            echo "[Info] You can manually run: activate-global-python-argcomplete --user"
+        fi
         ;;
     -l|--list)
         shift

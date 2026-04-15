@@ -13,11 +13,8 @@ Eigen::Quaternionf torso_quat_w(isaaclab::ManagerBasedRLEnv* env) {
     auto root_quat = env->robot->data.root_quat_w;
     auto & motors = robot->lowstate->msg_.motor_state();
 
-    Eigen::Quaternionf torso_quat = root_quat \
-        * Eigen::AngleAxisf(motors[12].q(), Eigen::Vector3f::UnitZ()) \
-        * Eigen::AngleAxisf(motors[13].q(), Eigen::Vector3f::UnitX()) \
-        * Eigen::AngleAxisf(motors[14].q(), Eigen::Vector3f::UnitY()) \
-    ;
+    Eigen::Quaternionf torso_quat = root_quat
+        * Eigen::AngleAxisf(motors[12].q(), Eigen::Vector3f::UnitZ());
     return torso_quat;
 };
 
@@ -25,11 +22,8 @@ Eigen::Quaternionf anchor_quat_w(std::shared_ptr<State_Mimic::MotionLoader_> loa
 {
     const auto root_quat = loader->root_quaternion();
     const auto joint_pos = loader->joint_pos();
-    Eigen::Quaternionf torso_quat = root_quat \
-        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ()) \
-        * Eigen::AngleAxisf(joint_pos[13], Eigen::Vector3f::UnitX()) \
-        * Eigen::AngleAxisf(joint_pos[14], Eigen::Vector3f::UnitY()) \
-    ;
+    Eigen::Quaternionf torso_quat = root_quat
+        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ());
     return torso_quat;
 }
 

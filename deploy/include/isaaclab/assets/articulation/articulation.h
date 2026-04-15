@@ -5,50 +5,55 @@
 
 #include <eigen3/Eigen/Dense>
 #include "unitree/dds_wrapper/common/unitree_joystick.hpp"
+#include "goal_pose.h"
 
 namespace isaaclab
 {
 
-class MotionLoader;
+    class MotionLoader;
 
-struct ArticulationData
-{
-    Eigen::Vector3f GRAVITY_VEC_W = Eigen::Vector3f(0.0f, 0.0f, -1.0f);
-    Eigen::Vector3f FORWARD_VEC_B = Eigen::Vector3f(1.0f, 0.0f, 0.0f);
+    struct ArticulationData
+    {
+        Eigen::Vector3f GRAVITY_VEC_W = Eigen::Vector3f(0.0f, 0.0f, -1.0f);
+        Eigen::Vector3f FORWARD_VEC_B = Eigen::Vector3f(1.0f, 0.0f, 0.0f);
 
-    std::vector<float> joint_stiffness; // sdk order
-    std::vector<float> joint_damping; // sdk order
+        std::vector<float> joint_stiffness; // sdk order
+        std::vector<float> joint_damping;   // sdk order
 
-    // Joint positions of all joints.
-    Eigen::VectorXf joint_pos;
-    
-    // Default joint positions of all joints.
-    Eigen::VectorXf default_joint_pos;
+        // Joint positions of all joints.
+        Eigen::VectorXf joint_pos;
 
-    // Joint velocities of all joints.
-    Eigen::VectorXf joint_vel;
+        // Default joint positions of all joints.
+        Eigen::VectorXf default_joint_pos;
 
-    // Root angular velocity in base world frame.
-    Eigen::Vector3f root_ang_vel_b;
+        // Joint velocities of all joints.
+        Eigen::VectorXf joint_vel;
 
-    // Projection of the gravity direction on base frame.
-    Eigen::Vector3f projected_gravity_b;
+        // Root angular velocity in base world frame.
+        Eigen::Vector3f root_ang_vel_b;
 
-    Eigen::Quaternionf root_quat_w;
+        // Projection of the gravity direction on base frame.
+        Eigen::Vector3f projected_gravity_b;
 
-    std::vector<float> joint_ids_map;
+        Eigen::Quaternionf root_quat_w;
 
-    unitree::common::UnitreeJoystick* joystick = nullptr;
-};
+        std::vector<float> joint_ids_map;
+        std::vector<float> joint_policy_map;
 
-class Articulation
-{
-public:
-    Articulation(){}
+        unitree::common::UnitreeJoystick *joystick = nullptr;
 
-    virtual void update(){};
+        // Goal pose data from DDS topic /goal_pose
+        GoalPoseData *goal_pose = nullptr;
+    };
 
-    ArticulationData data;
-};
+    class Articulation
+    {
+    public:
+        Articulation() {}
+
+        virtual void update() {};
+
+        ArticulationData data;
+    };
 
 };

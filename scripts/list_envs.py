@@ -16,6 +16,8 @@ import pathlib
 import pkgutil
 import sys
 
+from isaaclab.app import AppLauncher
+
 
 def _walk_packages(
     path: str | None = None,
@@ -56,16 +58,18 @@ def _walk_packages(
                 yield from _walk_packages(path, info.name + ".", onerror)
 
 
-def import_packages():
+def import_packages(launch_sim=True, headless=False):
+    if launch_sim:
+        app_launcher = AppLauncher(headless=headless)
+        simulation_app = app_launcher.app
+
     sys.path.insert(0, f"{pathlib.Path(__file__).parent.parent}/source/unitree_rl_lab/unitree_rl_lab/tasks/")
-    for package in ["locomotion.robots", "mimic.robots"]:
+    for package in ["locomotion.robots", "mimic.robots", "navigation"]:
         package = importlib.import_module(package)
         for _ in _walk_packages(package.__path__, package.__name__ + "."):
             pass
     sys.path.pop(0)
 
-
-import_packages()
 
 """Rest everything follows."""
 
@@ -74,6 +78,8 @@ from prettytable import PrettyTable
 
 
 def main():
+    import_packages(launch_sim=True, headless=True)
+    
     """Print all environments registered in `unitree_rl_lab` extension."""
     # print all the available environments
     table = PrettyTable(["S. No.", "Task Name", "Entry Point", "Config"])
