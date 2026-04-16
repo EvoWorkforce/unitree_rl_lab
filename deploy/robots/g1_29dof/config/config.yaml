@@ -1,4 +1,15 @@
+all_transitions: &all_transitions
+  Passive: key_z.on_pressed | RT + B.on_pressed
+  FixStand: key_x.on_pressed | RT + Y.on_pressed
+  Velocity: key_v.on_pressed | RB + X.on_pressed
+  Mimic_Dance_102: key_2.on_pressed | RB + A.on_pressed
+  # Mimic_Gangnam_Style: key_1.on_pressed
+
+# L1/LB & L2/LT: Left Shoulder / Left Trigger
+# R1/RB & R2/RT: Right Shoulder / Right Trigger
+
 FSM:
+  enable_keyboard: true  # Enable keyboard input for FSM transitions
   _: # enabled fsms
     Passive:
       id: 1
@@ -16,8 +27,7 @@ FSM:
       type: Mimic
 
   Passive:
-    transitions: 
-      FixStand: LT + up.on_pressed
+    transitions: *all_transitions
     mode: [
       1,1,1,1,1,1,
       1,1,1,1,1,1,
@@ -33,9 +43,7 @@ FSM:
       3,3,3,3,3,3,3,  
     ]
   FixStand:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Velocity: RB + X.on_pressed
+    transitions: *all_transitions
     kp: [
       100., 100., 100., 150., 40., 40.,
       100., 100., 100., 150., 40., 40.,
@@ -61,26 +69,18 @@ FSM:
       ]
     ]
   Velocity:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Mimic_Dance_102: LB + down.on_pressed
-      Mimic_Gangnam_Style: LB + left.on_pressed
-
+    transitions: *all_transitions
     policy_dir: config/policy/velocity
     # policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_velocity
   Mimic_Dance_102:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Velocity: RB + X.on_pressed
+    transitions: *all_transitions
     fps: 60
     motion_file: config/policy/mimic/dance_102/params/G1_Take_102.bvh_60hz.csv
     policy_dir: config/policy/mimic/dance_102/
     time_start: 2.8
     time_end: 24.0
   Mimic_Gangnam_Style:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Velocity: RB + X.on_pressed
+    transitions: *all_transitions
     fps: 60
     motion_file: config/policy/mimic/gangnam_style/params/G1_gangnam_style_V01.bvh_60hz.csv
     policy_dir: config/policy/mimic/gangnam_style/

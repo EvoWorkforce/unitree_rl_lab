@@ -37,8 +37,16 @@ int main(int argc, char **argv)
     std::cout << " --- Unitree Robotics --- \n";
     std::cout << "     G1-23dof Controller \n";
 
+    // Read ROS_DOMAIN_ID from environment variable, default to 0 if not set
+    int ros_domain_id = 0;
+    const char *env_p = std::getenv("ROS_DOMAIN_ID");
+    if (env_p != nullptr)    {
+        ros_domain_id = std::stoi(std::string(env_p));
+    }
+    spdlog::info("Using ROS_DOMAIN_ID: {}", ros_domain_id);
+
     // Unitree DDS Config
-    unitree::robot::ChannelFactory::Instance()->Init(1, vm["network"].as<std::string>());
+    unitree::robot::ChannelFactory::Instance()->Init(ros_domain_id, vm["network"].as<std::string>());
 
     init_fsm_state();
 

@@ -17,7 +17,7 @@ from isaaclab.utils import configclass
 
 from unitree_rl_lab.assets.robots import unitree_actuators
 
-UNITREE_MODEL_DIR = "/home/ubuntu/workspace/unitree_models/unitree_model" 
+UNITREE_MODEL_DIR = "/home/ubuntu/workspace/unitree_models/unitree_model"
 UNITREE_ROS_DIR = "/home/ubuntu/workspace/unitree_models/unitree_ros"
 
 @configclass
