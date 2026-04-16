@@ -47,13 +47,19 @@ int main(int argc, char** argv)
 
     init_fsm_state();
 
-    FSMState::lowcmd->msg_.mode_machine() = 6; // 29dof + dextrous hands
+    // mode_machine=4 for 23dof
+    // mode_machine=5 for 29dof
+    // mode_machine=6 for 29dof + dextrous hands
+    FSMState::lowcmd->msg_.mode_machine() = 5; 
     if(!FSMState::lowcmd->check_mode_machine(FSMState::lowstate)) {
-        spdlog::critical("Unmatched robot type: expected 29dof, but got {}", FSMState::lowstate->msg_.mode_machine());
-        exit(-1);
+        FSMState::lowcmd->msg_.mode_machine() = 6; 
+        if(!FSMState::lowcmd->check_mode_machine(FSMState::lowstate)) {
+            spdlog::critical("Unmatched robot type: expected 29dof (5 or 6), but got {}", FSMState::lowstate->msg_.mode_machine());
+            exit(-1);
+        }
     }
     
-     // Initialize keyboard input if enabled in config
+    // Initialize keyboard input if enabled in config
     bool enable_keyboard = false;
     try
     {
