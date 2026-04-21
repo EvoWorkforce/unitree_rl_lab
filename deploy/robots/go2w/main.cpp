@@ -6,6 +6,7 @@
 std::unique_ptr<LowCmd_t> FSMState::lowcmd = nullptr;
 std::shared_ptr<LowState_t> FSMState::lowstate = nullptr;
 std::shared_ptr<Keyboard> FSMState::keyboard = nullptr;
+std::shared_ptr<isaaclab::KeyboardInput> FSMState::keyboard_input = nullptr;
 
 void init_fsm_state()
 {
@@ -32,10 +33,34 @@ int main(int argc, char** argv)
     std::cout << " --- Unitree Robotics --- \n";
     std::cout << "     Go2W Controller \n";
 
+    // Read ROS_DOMAIN_ID from environment variable, default to 0 if not set
+    int ros_domain_id = 0;
+    const char *env_p = std::getenv("ROS_DOMAIN_ID");
+    if (env_p != nullptr)    {
+        ros_domain_id = std::stoi(std::string(env_p));
+    }
+    spdlog::info("Using ROS_DOMAIN_ID: {}", ros_domain_id);
+
     // Unitree DDS Config
-    unitree::robot::ChannelFactory::Instance()->Init(0, vm["network"].as<std::string>());
+    unitree::robot::ChannelFactory::Instance()->Init(ros_domain_id, vm["network"].as<std::string>());
 
     init_fsm_state();
+
+    // Initialize keyboard input if enabled in config
+    bool enable_keyboard = false;
+    try
+    {
+        enable_keyboard = param::config["FSM"]["enable_keyboard"].as<bool>();
+    }
+    catch (...)
+    {
+    }
+
+    if (enable_keyboard)
+    {
+        spdlog::info("Keyboard input enabled for FSM transitions");
+        FSMState::keyboard_input = std::make_shared<isaaclab::KeyboardInput>();
+    }
 
     // Initialize FSM
     auto fsm = std::make_unique<CtrlFSM>(param::config["FSM"]);

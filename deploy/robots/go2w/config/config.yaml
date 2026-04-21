@@ -1,15 +1,23 @@
+all_transitions: &all_transitions
+  Passive: key_z.on_pressed | RT + B.on_pressed
+  FixStand: key_x.on_pressed | RT + Y.on_pressed
+  #Velocity: key_v.on_pressed | RB + X.on_pressed
+
+# L1/LB & L2/LT: Left Shoulder / Left Trigger
+# R1/RB & R2/RT: Right Shoulder / Right Trigger
+
 FSM:
+  enable_keyboard: true  # Enable keyboard input for FSM transitions
   _: # enabled fsms
     Passive:
       id: 1
     FixStand:
       id: 2
-    Velocity:
-      id: 3
-      type: RLBase
+    # Velocity:
+    #   id: 3
+    #   type: RLBase
   Passive:
-    transitions: 
-      FixStand: LT + A.on_pressed
+    transitions: *all_transitions
     mode: [
       1, 1, 1, 1,
       1, 1, 1, 1, 
@@ -23,9 +31,7 @@ FSM:
       3, 3, 3, 3
     ]
   FixStand:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Velocity: start.on_pressed
+    transitions: *all_transitions
     kp: [ 60, 80, 80, 60, 
           80, 80, 60, 80, 
           80, 60, 80, 80,
@@ -41,7 +47,6 @@ FSM:
       [0.0, 1.36, -2.65, 0.0, 1.36, -2.65, 0.0, 1.36, -2.65, 0.0, 1.36, -2.65],
       [0., 0.8, -1.5, 0., 0.8, -1.5, 0., 0.8, -1.5, 0., 0.8, -1.5],
     ]
-  Velocity:
-    transitions: 
-      Passive: LT + B.on_pressed
-    policy_dir: ../../../logs/rsl_rl/unitree_go2w_velocity
+  # Velocity:
+  #   transitions: *all_transitions
+  #   policy_dir: ../../../logs/rsl_rl/unitree_go2w_velocity
