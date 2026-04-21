@@ -2,8 +2,9 @@ all_transitions: &all_transitions
   Passive: key_z.on_pressed | RT + B.on_pressed
   FixStand: key_x.on_pressed | RT + Y.on_pressed
   Velocity: key_v.on_pressed | RB + X.on_pressed
+  # VelocityEvo: key_2.on_pressed | RB + A.on_pressed
   Mimic_Dance_102: key_2.on_pressed | RB + A.on_pressed
-  # Mimic_Gangnam_Style: key_1.on_pressed
+  #Mimic_Gangnam_Style: key_1.on_pressed
 
 # L1/LB & L2/LT: Left Shoulder / Left Trigger
 # R1/RB & R2/RT: Right Shoulder / Right Trigger
@@ -18,6 +19,9 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
+    # VelocityEvo:
+    #   id: 4
+    #   type: RLBase
 
     Mimic_Dance_102: # uncomment to enable
       id: 101
@@ -72,6 +76,9 @@ FSM:
     transitions: *all_transitions
     policy_dir: config/policy/velocity
     # policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_velocity
+  # VelocityEvo:
+  #   transitions: *all_transitions
+  #   policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_velocity/wandb_yqce3eqf
   Mimic_Dance_102:
     transitions: *all_transitions
     fps: 60
