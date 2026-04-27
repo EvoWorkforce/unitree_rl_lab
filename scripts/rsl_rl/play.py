@@ -17,21 +17,41 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+    "--video", action="store_true", default=False, help="Record videos during training."
 )
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=None, help="Number of environments to simulate."
+)
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
     "--use_pretrained_checkpoint",
     action="store_true",
     help="Use the pre-trained checkpoint from Nucleus.",
 )
-parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 parser.add_argument(
-    "--disable_wandb", action="store_true", default=False, help="Disable WandB logging (enabled by default)."
+    "--real-time",
+    action="store_true",
+    default=False,
+    help="Run in real-time, if possible.",
+)
+parser.add_argument(
+    "--disable_wandb",
+    action="store_true",
+    default=False,
+    help="Disable WandB logging (enabled by default).",
 )
 parser.add_argument(
     "--run_path",
@@ -49,7 +69,9 @@ args_cli = parser.parse_args()
 # Validate WandB arguments before launching IsaacSim
 if not args_cli.disable_wandb and not args_cli.run_path:
     print("[ERROR] WandB is enabled but no --run_path specified.")
-    print("[ERROR] Please provide a WandB run path using --run_path entity/project/run_id")
+    print(
+        "[ERROR] Please provide a WandB run path using --run_path entity/project/run_id"
+    )
     print("[ERROR] Or disable WandB with --disable_wandb")
     exit(1)
 
@@ -75,8 +97,14 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
+
+# from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+from isaaclab_rl.rsl_rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlVecEnvWrapper,
+    export_policy_as_jit,
+    export_policy_as_onnx,
+)
 from isaaclab_tasks.utils import get_checkpoint_path
 
 import unitree_rl_lab.tasks  # noqa: F401
@@ -116,7 +144,9 @@ def _download_latest_wandb_checkpoint(run_path: str, download_dir: str) -> str |
     checkpoint_path = downloaded_file.name
     downloaded_file.close()
 
-    print(f"[INFO] Downloaded WandB checkpoint step {latest_step} to: {checkpoint_path}")
+    print(
+        f"[INFO] Downloaded WandB checkpoint step {latest_step} to: {checkpoint_path}"
+    )
 
     # Download deploy.yaml if it exists
     if deploy_yaml_file:
@@ -124,7 +154,9 @@ def _download_latest_wandb_checkpoint(run_path: str, download_dir: str) -> str |
         os.makedirs(params_dir, exist_ok=True)
         deploy_file = deploy_yaml_file.download(root=download_dir, replace=True)
         deploy_file.close()
-        print(f"[INFO] Downloaded deploy.yaml to: {os.path.join(params_dir, 'deploy.yaml')}")
+        print(
+            f"[INFO] Downloaded deploy.yaml to: {os.path.join(params_dir, 'deploy.yaml')}"
+        )
     else:
         print("[INFO] No deploy.yaml found in WandB run")
 
@@ -141,7 +173,9 @@ def main():
         use_fabric=not args_cli.disable_fabric,
         entry_point_key="play_env_cfg_entry_point",
     )
-    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
+    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(
+        args_cli.task, args_cli
+    )
 
     # Honor --run_name from cli_args for local loading
     if args_cli.run_name is not None:
@@ -174,32 +208,46 @@ def main():
         try:
             run_name = args_cli.run_path.split("/")[-1]
             wandb_ckpt_dir = os.path.join(log_root_path, f"wandb_{run_name}")
-            resume_path = _download_latest_wandb_checkpoint(args_cli.run_path, wandb_ckpt_dir)
+            resume_path = _download_latest_wandb_checkpoint(
+                args_cli.run_path, wandb_ckpt_dir
+            )
 
             if resume_path is not None:
                 print(f"[INFO] Using checkpoint from WandB: {resume_path}")
             else:
-                print("[WARNING] No model_*.pt checkpoint found in WandB run, falling back to local checkpoint")
-                resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+                print(
+                    "[WARNING] No model_*.pt checkpoint found in WandB run, falling back to local checkpoint"
+                )
+                resume_path = get_checkpoint_path(
+                    log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+                )
 
         except Exception as e:
             print(f"[WARNING] Failed to download from WandB: {e}")
             print("[INFO] Falling back to local checkpoint")
-            resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+            resume_path = get_checkpoint_path(
+                log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+            )
     elif args_cli.use_pretrained_checkpoint:
         resume_path = get_published_pretrained_checkpoint("rsl_rl", args_cli.task)
         if not resume_path:
-            print("[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task.")
+            print(
+                "[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task."
+            )
             return
     elif args_cli.checkpoint:
         resume_path = retrieve_file_path(args_cli.checkpoint)
     else:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        resume_path = get_checkpoint_path(
+            log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+        )
 
     log_dir = os.path.dirname(resume_path)
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
+    )
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -223,11 +271,15 @@ def main():
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
     if not hasattr(agent_cfg, "class_name") or agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = OnPolicyRunner(
+            env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device
+        )
     elif agent_cfg.class_name == "DistillationRunner":
         from rsl_rl.runners import DistillationRunner
 
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = DistillationRunner(
+            env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device
+        )
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.load(resume_path)
@@ -254,8 +306,12 @@ def main():
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
-    export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    export_policy_as_jit(
+        policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt"
+    )
+    export_policy_as_onnx(
+        policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx"
+    )
 
     # params for deployment
     params_dir = os.path.join(os.path.dirname(resume_path), "params")
