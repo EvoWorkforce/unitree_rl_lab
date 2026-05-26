@@ -1,31 +1,51 @@
 cmake_minimum_required(VERSION 3.12)
 project(go2w_controller)
 
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_STANDARD 17)
+
+# 1. Find packages
 find_package(Boost REQUIRED COMPONENTS program_options)
 find_package(yaml-cpp REQUIRED)
 
-include_directories(
+# 2. Dynamic Architecture Detection for ONNX Runtime
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    set(ONNX_ARCH "linux-x64-1.22.0")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    set(ONNX_ARCH "linux-aarch64-1.22.0")
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+set(ONNX_ROOT_DIR "${PROJECT_SOURCE_DIR}/../../thirdparty/onnxruntime-${ONNX_ARCH}")
+# Changed to look for libonnxruntime.so inside the detected architecture directory
+set(ONNX_LIB "${ONNX_ROOT_DIR}/lib/libonnxruntime.so")
+
+# 3. Define the library target (fixed relative path using PROJECT_SOURCE_DIR)
+file(GLOB_RECURSE ADD_SRC_LIST "${PROJECT_SOURCE_DIR}/src/*.cpp")
+add_library(${PROJECT_NAME}_lib SHARED ${ADD_SRC_LIST})
+
+# Target-specific include directories
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
   /usr/include/eigen3
-  /usr/local/include/ddscxx # dds
-  /usr/local/include/iceoryx/v2.0.2 # dds
+  /usr/local/include/ddscxx
+  /usr/local/include/iceoryx/v2.0.2
   include
-  ${PROJECT_SOURCE_DIR}/../../thirdparty/onnxruntime-linux-x64-1.22.0/include
-  ${PROJECT_SOURCE_DIR}/../../thirdparty/onnxruntime-linux-aarch64-1.22.0/include
+  ${ONNX_ROOT_DIR}/include
   ${PROJECT_SOURCE_DIR}/../../include/
 )
 
-link_libraries(
-  unitree_sdk2 ddsc ddscxx rt pthread # dds
-  libboost_program_options.a libyaml-cpp.a fmt
-  ${PROJECT_SOURCE_DIR}/../../thirdparty/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so
-  ${PROJECT_SOURCE_DIR}/../../thirdparty/onnxruntime-linux-aarch64-1.22.0/lib/libonnxruntime.so
+# Target-specific link libraries
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+  unitree_sdk2 ddsc ddscxx rt pthread
+  Boost::program_options
+  yaml-cpp
+  fmt
+  ${ONNX_LIB}
 )
 
-file(GLOB_RECURSE ADD_SRC_LIST
-  src/*.cpp
-)
-
-add_library(${PROJECT_NAME}_lib ${ADD_SRC_LIST})
-link_libraries(${PROJECT_NAME}_lib)
-
+# 4. Define the executable target
 add_executable(go2w_ctrl main.cpp)
+
+# Link the executable cleanly to your project library
+target_link_libraries(go2w_ctrl PRIVATE ${PROJECT_NAME}_lib)
