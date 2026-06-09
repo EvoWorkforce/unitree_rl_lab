@@ -6,7 +6,9 @@
 #include "FSMState.h"
 #include "isaaclab/envs/mdp/actions/joint_actions.h"
 #include "isaaclab/envs/mdp/terminations.h"
+#include <algorithm>
 #include <spdlog/spdlog.h>
+// Include the vector library
 
 class State_ArmReach : public FSMState
 {

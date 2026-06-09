@@ -1,7 +1,5 @@
 #include "FSM/State_ArmReach.h"
 
-#include <spdlog/spdlog.h>
-
 #include <unordered_map>
 #include <vector>
 
@@ -14,14 +12,9 @@ namespace isaaclab
 REGISTER_OBSERVATION(pose_command)
 {
     // std::string key = FSMState::keyboard->key();
+    // static auto cfg = env->cfg["commands"]["pose_command"]["ranges"];
 
-    // cfg is a YAML::Node of type map
-    static auto cfg = env->cfg["commands"]["pose_command"]["ranges"];
-
-    static std::vector<float> current_target = {0.3f, 0.0f, 0.4f, 0.0f,
-                                                0.0f, 0.0f, 0.0f};
-
-    
+    static std::vector<float> current_target = {0.3f, 0.0f, 0.4f, 0.0f, 0.0f, 0.0f, 0.0f};
     return current_target;
 }
 
@@ -52,30 +45,10 @@ State_ArmReach::State_ArmReach(int state_mode, std::string state_string)
 
 void State_ArmReach::run()
 {
-    //vector with the id's of the joints of the left arm
-    std::vector<int> action_joints{11, 15, 19, 21, 23, 25, 27};
     auto action = env->action_manager->processed_actions();
     for (int i(0); i < env->robot->data.joint_ids_map.size(); i++)
     {
-        
-        // Check if "i" is one of the joints of the arm
-        int ctn = std::count(action_joints.begin(), action_joints.end(), i);
-
-        if(ctn <= 0)
-        {
-            // Change mode to 0 if count is 0 (not included in the vector)
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].mode() = 0;
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kp() = 0;
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kd() = 0;
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].dq() = 0;
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].tau() = 0;
-            
-        }   else 
-        {
-            lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].q() =
-                action[i];
-        }
-
-        // spdlog::info("I = {}", i);
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].q() =
+            action[i];
     }
 }
