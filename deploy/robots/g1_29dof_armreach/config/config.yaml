@@ -85,7 +85,7 @@ FSM:
     policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_velocity/wandb_yqce3eqf
   ArmReach:
     transitions: *all_transitions
-    policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_armreach/wandb_vbksxgp1
+    policy_dir: ../../../logs/rsl_rl/unitree_g1_29dof_armreach/wandb_a1a4h1u7
   Mimic_Dance_102:
     transitions: *all_transitions
     fps: 60
